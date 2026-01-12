@@ -96,6 +96,9 @@ internal open class BasicWindowProc(
     private val _accentColor: MutableStateFlow<Color> = MutableStateFlow(currentAccentColor())
     val accentColor: StateFlow<Color> = _accentColor.asStateFlow()
 
+    private val _isInDarkMode: MutableStateFlow<Boolean> = MutableStateFlow(isSystemInDarkMode())
+    val isInDarkMode: StateFlow<Boolean> = _isInDarkMode.asStateFlow()
+
     private val defaultWindowProc =
         user32.SetWindowLongPtr(
             windowHandle,
@@ -114,6 +117,7 @@ internal open class BasicWindowProc(
             // Theme changed for color and darkTheme
             if (changedKey == "ImmersiveColorSet") {
                 _accentColor.tryEmit(currentAccentColor())
+                _isInDarkMode.tryEmit(isSystemInDarkMode())
                 onThemeChanged()
             }
         }
@@ -129,6 +133,15 @@ internal open class BasicWindowProc(
         lParam: WinDef.LPARAM
     ): LRESULT {
         return user32.CallWindowProc(defaultWindowProc, hwnd, uMsg, wParam, lParam)
+    }
+
+    private fun isSystemInDarkMode(): Boolean {
+        val value = Advapi32Util.registryGetIntValue(
+            WinReg.HKEY_CURRENT_USER,
+            "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+            "AppsUseLightTheme",
+        )
+        return value == 0
     }
 
     private fun currentAccentColor(): Color {

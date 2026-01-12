@@ -36,6 +36,11 @@ import org.jetbrains.skiko.hostOs
  * LocalPlatformWindow.current.accentColor.collectAsState(Color.Unspecified)
  * ```
  *
+ * If you want to get whether the system is in dark/light mode
+ * ```
+ * LocalPlatformWindow.current.isSystemInDarkMode.collectAsState(isSystemInDarkTheme())
+ * ```
+ *
  * If you want to set the dark/light mode of title bar on Windows
  * ```
  * overrideTitleBarAppearance(isDark = true) // for dark mode
