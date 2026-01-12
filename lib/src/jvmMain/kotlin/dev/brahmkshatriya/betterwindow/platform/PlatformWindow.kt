@@ -49,6 +49,14 @@ class PlatformWindow(
         }
     }
 
+    // System theme for window.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val isSystemInDarkMode by lazy {
+        windowsWindowProc.transformLatest { proc ->
+            proc?.isInDarkMode?.collectLatest { emit(it) }
+        }
+    }
+
     private var isWindowsUndecoratedFullscreen by mutableStateOf(false)
 
     val isExactlyMaximized: Boolean get() = windowState.placement == WindowPlacement.Maximized

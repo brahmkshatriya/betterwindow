@@ -4,7 +4,7 @@ kotlin = "2.2.20"
 kotlinx-coroutines = "1.10.2"
 kotlinx-atomicfu = "0.27.0"
 vanniktechMavenPublish = "0.34.0"
-jna = "5.13.0"
+jna = "5.18.1"
 
 [libraries]
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
