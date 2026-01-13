@@ -16,7 +16,7 @@ fun main() = application {
     ) {
         val color by LocalPlatformWindow.current.accentColor.collectAsState()
         overrideTitleBarAppearance(isSystemInDarkTheme())
-        App(color,true)
+        App(color, showSurface = true)
     }
 
     BetterWindow(
@@ -29,6 +29,6 @@ fun main() = application {
         )
         val color by LocalPlatformWindow.current.accentColor.collectAsState()
         overrideTitleBarAppearance(isSystemInDarkTheme())
-        App(color, false)
+        App(color, showSurface = false)
     }
 }
