@@ -2,21 +2,17 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
-    alias(libs.plugins.vanniktech.mavenPublish)
+    alias(libs.plugins.mavenPublish)
 }
 
 kotlin {
     jvm()
     sourceSets {
-        commonMain.dependencies {
+        jvmMain.dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)
-            implementation(compose.material3)
             implementation(compose.ui)
             implementation(compose.components.resources)
-        }
-
-        jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
             api(libs.jna)
@@ -30,7 +26,7 @@ mavenPublishing {
     publishToMavenCentral(true)
     signAllPublications()
 
-    coordinates("dev.brahmkshatriya", "betterwindow", "1.0.0")
+    coordinates("dev.brahmkshatriya", "betterwindow", "1.1.0")
 
     pom {
         name = "Better Window"

@@ -21,6 +21,7 @@ kotlin {
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
+            implementation("com.mayakapps.compose:window-styler:0.3.3-SNAPSHOT")
             implementation(project(":lib"))
         }
     }

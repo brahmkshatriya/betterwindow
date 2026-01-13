@@ -39,9 +39,7 @@ import com.sun.jna.platform.win32.WinUser.WM_SIZE
 import com.sun.jna.platform.win32.WinUser.WS_SYSMENU
 import com.sun.jna.platform.win32.WinUser.WindowProc
 import dev.brahmkshatriya.betterwindow.platform.LocalPlatformWindow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import dev.brahmkshatriya.betterwindow.platform.WindowsPlatformWindow
 import dev.brahmkshatriya.betterwindow.platform.window.ExtendedUser32.Companion.MFT_STRING
 import dev.brahmkshatriya.betterwindow.platform.window.ExtendedUser32.Companion.MIIM_STATE
 import dev.brahmkshatriya.betterwindow.platform.window.ExtendedUser32.Companion.SC_CLOSE
@@ -64,21 +62,32 @@ import dev.brahmkshatriya.betterwindow.platform.window.ExtendedUser32.Companion.
 import dev.brahmkshatriya.betterwindow.platform.window.ExtendedUser32.Companion.WM_NCRBUTTONUP
 import dev.brahmkshatriya.betterwindow.platform.window.ExtendedUser32.Companion.WM_SETTINGCHANGE
 import dev.brahmkshatriya.betterwindow.platform.window.ExtendedUser32.MENUITEMINFO
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.jetbrains.skiko.SkiaLayer
 import java.awt.Window
+import javax.swing.SwingUtilities
 
 @Composable
 fun HandleWindowsWindowProc() {
-    val platformWindow = LocalPlatformWindow.current
+    val platformWindow = LocalPlatformWindow.current as? WindowsPlatformWindow ?: return
     DisposableEffect(platformWindow) {
-        val handler = try {
-            WindowsWindowUtils.Companion.instance.handleWindowProc(platformWindow)
-        } catch (e: Throwable) {
-            e.printStackTrace()
-            null
+        // Double invokeLater to ensure window proc setup runs after other libraries
+        // like WindowStyle (mayakapps) have completed their modifications.
+        // WindowStyle uses SwingUtilities.invokeLater in its init block to call hackContentPane(),
+        // so we need to queue our setup to run after that.
+        SwingUtilities.invokeLater {
+            SwingUtilities.invokeLater {
+                try {
+                    WindowsWindowUtils.instance.handleWindowProc(platformWindow)
+                } catch (e: Throwable) {
+                    e.printStackTrace()
+                }
+            }
         }
         onDispose {
-            handler?.let { WindowsWindowUtils.Companion.instance.disposeWindowProc(platformWindow) }
+            WindowsWindowUtils.instance.disposeWindowProc(platformWindow)
         }
     }
 }
@@ -110,7 +119,7 @@ internal open class BasicWindowProc(
         hwnd: HWND,
         uMsg: Int,
         wParam: WinDef.WPARAM,
-        lParam: WinDef.LPARAM
+        lParam: WinDef.LPARAM,
     ): LRESULT {
         if (uMsg == WM_SETTINGCHANGE) {
             val changedKey = Pointer(lParam.toLong()).getWideString(0)
@@ -130,7 +139,7 @@ internal open class BasicWindowProc(
         hwnd: HWND,
         uMsg: Int,
         wParam: WinDef.WPARAM,
-        lParam: WinDef.LPARAM
+        lParam: WinDef.LPARAM,
     ): LRESULT {
         return user32.CallWindowProc(defaultWindowProc, hwnd, uMsg, wParam, lParam)
     }
@@ -165,21 +174,25 @@ internal open class BasicWindowProc(
 internal class ExtendedTitleBarWindowProc(
     window: Window,
     private val user32: ExtendedUser32,
-    dwmapi: Dwmapi
+    dwmapi: Dwmapi,
 ) : BasicWindowProc(user32, window) {
 
     private var childHitTestOwner: WindowsWindowHitTestOwner? = null
 
-    private val _windowIsActive: MutableStateFlow<Boolean> = MutableStateFlow(user32.GetActiveWindow() == windowHandle)
+    private val _windowIsActive: MutableStateFlow<Boolean> =
+        MutableStateFlow(user32.GetActiveWindow() == windowHandle)
     val windowIsActive: StateFlow<Boolean> = _windowIsActive.asStateFlow()
 
-    private val _frameIsColorful: MutableStateFlow<Boolean> = MutableStateFlow(isAccentColorWindowFrame())
+    private val _frameIsColorful: MutableStateFlow<Boolean> =
+        MutableStateFlow(isAccentColorWindowFrame())
     val frameIsColorful: StateFlow<Boolean> = _frameIsColorful.asStateFlow()
 
     private var hitTestResult = WindowsWindowHitResult.CLIENT
 
+    private val skiaLayer = window.findSkiaLayer()
+
     private val skiaLayerWindowProc: SkiaLayerHitTestWindowProc? =
-        window.findSkiaLayer()?.let { SkiaLayerHitTestWindowProc(it, user32, ::hitTest) }
+        skiaLayer?.let { SkiaLayerHitTestWindowProc(it, user32, ::hitTest) }
 
     private var isMaximized: Boolean = user32.isWindowInMaximized(windowHandle)
     private var dpi: UINT = UINT(0)
@@ -192,9 +205,21 @@ internal class ExtendedTitleBarWindowProc(
     private var padding: Int = 0
 
     init {
-        dwmapi.DwmExtendFrameIntoClientArea(windowHandle, Dwmapi.WindowMargins(-1, -1, -1, -1))
+        if (skiaLayer?.transparency != true) {
+            dwmapi.DwmExtendFrameIntoClientArea(windowHandle, Dwmapi.WindowMargins(-1, -1, -1, -1))
+            eraseWindowBackground()
+        }
+
         windowHandle.updateWindowStyle { it and WS_SYSMENU.inv() }
-        eraseWindowBackground()
+
+        val rect = RECT()
+        user32.GetWindowRect(windowHandle, rect)
+        user32.SetWindowPos(
+            windowHandle, null,
+            rect.left, rect.top,
+            rect.right - rect.left, rect.bottom - rect.top,
+            SWP_NOZORDER or SWP_FRAMECHANGED or SWP_NOACTIVATE
+        )
     }
 
     /***
@@ -259,7 +284,12 @@ internal class ExtendedTitleBarWindowProc(
         }
     }
 
-    override fun callback(hwnd: HWND, uMsg: Int, wParam: WinDef.WPARAM, lParam: WinDef.LPARAM): LRESULT {
+    override fun callback(
+        hwnd: HWND,
+        uMsg: Int,
+        wParam: WinDef.WPARAM,
+        lParam: WinDef.LPARAM,
+    ): LRESULT {
         return when (uMsg) {
             // Returns 0 to make the window not draw the non-client area (title bar and border)
             // thus effectively making all the window our client area
@@ -286,7 +316,10 @@ internal class ExtendedTitleBarWindowProc(
                     edgeY = user32.GetSystemMetricsForDpi(WinUser.SM_CYEDGE, dpi)
                     padding = user32.GetSystemMetricsForDpi(WinUser.SM_CXPADDEDBORDER, dpi)
                     isMaximized = user32.isWindowInMaximized(hwnd)
-                    val params = Structure.newInstance(NCCalcSizeParams::class.java, Pointer(lParam.toLong()))
+                    val params = Structure.newInstance(
+                        NCCalcSizeParams::class.java,
+                        Pointer(lParam.toLong())
+                    )
                     params.read()
                     params.rgrc[0]?.apply {
                         left += if (isMaximized) {
@@ -410,14 +443,20 @@ internal class ExtendedTitleBarWindowProc(
         _frameIsColorful.tryEmit(isAccentColorWindowFrame())
     }
 
-    private fun updateMenuItemInfo(menu: HMENU, menuItemInfo: MENUITEMINFO, item: Int, enabled: Boolean) {
-        menuItemInfo.fState = if (enabled) ExtendedUser32.Companion.MFS_ENABLED else ExtendedUser32.Companion.MFS_DISABLED
+    private fun updateMenuItemInfo(
+        menu: HMENU,
+        menuItemInfo: MENUITEMINFO,
+        item: Int,
+        enabled: Boolean,
+    ) {
+        menuItemInfo.fState =
+            if (enabled) ExtendedUser32.MFS_ENABLED else ExtendedUser32.MFS_DISABLED
         user32.SetMenuItemInfo(menu, item, false, menuItemInfo)
     }
 
     // Workaround for background erase.
     private fun eraseWindowBackground() {
-        val buildNumber = WindowsWindowUtils.Companion.instance.windowsBuildNumber() ?: return
+        val buildNumber = WindowsWindowUtils.instance.windowsBuildNumber() ?: return
         if (buildNumber < 22000) {
             val flag =
                 SWP_NOZORDER or SWP_NOACTIVATE or SWP_FRAMECHANGED or SWP_NOMOVE or SWP_NOSIZE or SWP_ASYNCWINDOWPOS
@@ -439,7 +478,7 @@ internal class ExtendedTitleBarWindowProc(
         WindowsWindowHitResult.BORDER_TOP_LEFT,
         WindowsWindowHitResult.BORDER_TOP_RIGHT,
         WindowsWindowHitResult.BORDER_BOTTOM_LEFT,
-        WindowsWindowHitResult.BORDER_BOTTOM_RIGHT
+        WindowsWindowHitResult.BORDER_BOTTOM_RIGHT,
             -> true
 
         else -> false
@@ -488,7 +527,7 @@ internal class ExtendedTitleBarWindowProc(
     @Suppress("SpellCheckingInspection", "unused")
     class NCCalcSizeParams(
         @JvmField var rgrc: Array<RECT?> = Array(3) { null },
-        @JvmField var lppos: WindowPos? = null
+        @JvmField var lppos: WindowPos? = null,
     ) : Structure(), Structure.ByReference
 
     @Structure.FieldOrder(
@@ -508,7 +547,7 @@ internal class ExtendedTitleBarWindowProc(
         @JvmField var y: Int = 0,
         @JvmField var cx: Int = 0,
         @JvmField var cy: Int = 0,
-        @JvmField var flags: UINT = UINT()
+        @JvmField var flags: UINT = UINT(),
     ) : Structure(), Structure.ByReference
 
     override fun close() {
@@ -527,13 +566,20 @@ internal class SkiaLayerHitTestWindowProc(
     internal val contentHandle = HWND(skiaLayer.canvas.let(Native::getComponentPointer))
 
     private val defaultWindowProc =
-        user32.SetWindowLongPtr(contentHandle, WinUser.GWL_WNDPROC, CallbackReference.getFunctionPointer(this))
+        user32.SetWindowLongPtr(
+            contentHandle,
+            WinUser.GWL_WNDPROC,
+            CallbackReference.getFunctionPointer(this)
+        )
 
     private var hitResult = WindowsWindowHitResult.CLIENT
 
     init {
-        val buildNumber = WindowsWindowUtils.Companion.instance.windowsBuildNumber() ?: 22000
-        skiaLayer.transparency = buildNumber < 22000
+        // Only set transparency if not already transparent (e.g., set by WindowStyle)
+        if (!skiaLayer.transparency) {
+            val buildNumber = WindowsWindowUtils.instance.windowsBuildNumber() ?: 22000
+            skiaLayer.transparency = buildNumber < 22000
+        }
     }
 
     override fun callback(
@@ -547,16 +593,16 @@ internal class SkiaLayerHitTestWindowProc(
             WM_NCHITTEST -> {
                 hitResult = hitTest(lParam)
 
-                when (hitResult) {
+                val finalResult = when (hitResult) {
                     WindowsWindowHitResult.CLIENT,
                     WindowsWindowHitResult.CAPTION_MAX,
                     WindowsWindowHitResult.CAPTION_MIN,
-                    WindowsWindowHitResult.CAPTION_CLOSE
+                    WindowsWindowHitResult.CAPTION_CLOSE,
                         -> hitResult
 
                     else -> WindowsWindowHitResult.TRANSPARENT
                 }
-                    .let { LRESULT(it.value.toLong()) }
+                LRESULT(finalResult.value.toLong())
             }
 
             WM_NCMOUSEMOVE -> {

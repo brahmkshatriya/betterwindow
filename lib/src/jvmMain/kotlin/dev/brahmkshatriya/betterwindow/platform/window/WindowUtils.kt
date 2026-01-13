@@ -25,22 +25,14 @@ import java.awt.Window
 import java.awt.image.BufferedImage
 import javax.swing.JComponent
 
-@RequiresOptIn(
-    message = "This is unsafe platform API, use [ComposeWindow.setTitleBar] instead.",
-    level = RequiresOptIn.Level.ERROR,
-)
-annotation class UnsafePlatformWindowApi
-
 /**
  * @see AwtWindowUtils
  */
 interface WindowUtils {
-    @UnsafePlatformWindowApi
     fun setTitleBarColor(hwnd: Long, color: Color): Boolean {
         return false
     }
 
-    @UnsafePlatformWindowApi
     fun setDarkTitleBar(hwnd: Long, dark: Boolean): Boolean {
         return false
     }
@@ -94,18 +86,10 @@ abstract class AwtWindowUtils : WindowUtils {
     }
 }
 
-/**
- * 为桌面端窗口设置标题栏颜色
- * * 在 macOS 上没有作用, 因为 macOS 是沉浸标题栏
- * * 在 Windows 10 仅设置暗色或亮色, Windows 10 不支持自定义标题栏颜色
- * * 在 Linux 上没有作用, 因为 ani 现在不支持 Linux
- */
-@OptIn(UnsafePlatformWindowApi::class)
+
 fun ComposeWindow.setTitleBar(color: Color, dark: Boolean) {
     if (hostOs == OS.Windows) {
-        val winBuild = WindowsWindowUtils.instance.windowsBuildNumber()
-
-        if (winBuild == null) return
+        val winBuild = WindowsWindowUtils.instance.windowsBuildNumber() ?: return
         if (winBuild >= 22000) {
             WindowUtils.instance.setTitleBarColor(windowHandle, color)
         } else {

@@ -7,7 +7,7 @@
  * https://github.com/open-ani/ani/blob/main/LICENSE
  */
 
-@file:Suppress( "INVISIBLE_REFERENCE", "INVISIBLE_MEMBER",)
+@file:Suppress( "INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
 
 package dev.brahmkshatriya.betterwindow.platform.window
 
@@ -125,7 +125,7 @@ private class CanvasLayersLayoutHitTestOwner(
     private val layerClass =
         sceneClass.declaredClasses.first {
             it.name ==
-                    "androidx.compose.ui.scene.CanvasLayersComposeSceneImpl\$AttachedComposeSceneLayer"
+                    $$"androidx.compose.ui.scene.CanvasLayersComposeSceneImpl$AttachedComposeSceneLayer"
         }
 
     private val mainOwnerRef =

@@ -18,6 +18,7 @@ import androidx.compose.ui.window.WindowState
 import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.Structure
+import com.sun.jna.Structure.FieldOrder
 import com.sun.jna.platform.win32.Advapi32Util
 import com.sun.jna.platform.win32.BaseTSD.ULONG_PTR
 import com.sun.jna.platform.win32.Kernel32
@@ -42,6 +43,7 @@ import com.sun.jna.win32.StdCallLibrary
 import com.sun.jna.win32.W32APIOptions
 import dev.brahmkshatriya.betterwindow.platform.PlatformWindow
 import dev.brahmkshatriya.betterwindow.platform.SavedWindowsWindowState
+import dev.brahmkshatriya.betterwindow.platform.WindowsPlatformWindow
 import dev.brahmkshatriya.betterwindow.platform.window.ExtendedUser32.Companion.MONITOR_DEFAULTTONEAREST
 import dev.brahmkshatriya.betterwindow.platform.window.ExtendedUser32.Companion.SC_RESTORE
 import dev.brahmkshatriya.betterwindow.platform.window.ExtendedUser32.Companion.SWP_NOACTIVATE
@@ -56,7 +58,7 @@ import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.transformLatest
 import kotlin.math.roundToInt
 
-@OptIn(UnsafePlatformWindowApi::class)
+
 class WindowsWindowUtils : AwtWindowUtils() {
     private val dwmAPi: Dwmapi =
         Native.load("dwmapi", Dwmapi::class.java, W32APIOptions.DEFAULT_OPTIONS)
@@ -109,7 +111,7 @@ class WindowsWindowUtils : AwtWindowUtils() {
     }
 
     fun handleWindowProc(
-        platformWindow: PlatformWindow,
+        platformWindow: WindowsPlatformWindow,
         windowScope: WindowScope? = platformWindow.windowScope,
     ) {
         if (windowScope != null) {
@@ -132,7 +134,7 @@ class WindowsWindowUtils : AwtWindowUtils() {
     }
 
     suspend fun collectWindowProcHitTestProvider(
-        platformWindow: PlatformWindow,
+        platformWindow: WindowsPlatformWindow,
         hitTestOwner: WindowsWindowHitTestOwner,
     ) {
         platformWindow
@@ -142,7 +144,7 @@ class WindowsWindowUtils : AwtWindowUtils() {
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun windowIsActive(platformWindow: PlatformWindow): Flow<Boolean?> {
+    fun windowIsActive(platformWindow: WindowsPlatformWindow): Flow<Boolean?> {
         return platformWindow.windowsWindowProc.transformLatest {
             val proc = it as? ExtendedTitleBarWindowProc ?: return@transformLatest
             emitAll(proc.windowIsActive)
@@ -150,7 +152,7 @@ class WindowsWindowUtils : AwtWindowUtils() {
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun frameIsColorful(platformWindow: PlatformWindow): Flow<Boolean> {
+    fun frameIsColorful(platformWindow: WindowsPlatformWindow): Flow<Boolean> {
         return platformWindow.windowsWindowProc.transformLatest {
             val proc = it as? ExtendedTitleBarWindowProc ?: return@transformLatest
             emitAll(proc.frameIsColorful)
@@ -169,7 +171,7 @@ class WindowsWindowUtils : AwtWindowUtils() {
         extendedUser32.ShowWindow(HWND(Pointer(windowHandle)), WinUser.SW_MAXIMIZE)
     }
 
-    fun disposeWindowProc(platformWindow: PlatformWindow) {
+    fun disposeWindowProc(platformWindow: WindowsPlatformWindow) {
         platformWindow.windowsWindowProc.value?.close()
         platformWindow.windowsWindowProc.tryEmit(null)
     }
@@ -188,9 +190,9 @@ class WindowsWindowUtils : AwtWindowUtils() {
         windowState: WindowState,
         undecorated: Boolean,
     ) {
+        val window = window as WindowsPlatformWindow
         // copied from vlcj
         // uk.co.caprica.vlcj.player.embedded.fullscreen.windows.Win32FullScreenHandler
-
         val hwnd = HWND(Pointer.createConstant(window.windowHandle))
         if (undecorated) {
             val maximised = extendedUser32.IsZoomed(hwnd)
@@ -327,7 +329,7 @@ internal interface Dwmapi : StdCallLibrary {
     fun DwmExtendFrameIntoClientArea(hwnd: HWND, margins: WindowMargins): LRESULT
 
     // See https://stackoverflow.com/q/62240901
-    @Structure.FieldOrder(
+    @FieldOrder(
         "leftBorderWidth",
         "rightBorderWidth",
         "topBorderHeight",
@@ -341,14 +343,12 @@ internal interface Dwmapi : StdCallLibrary {
     ) : Structure(), Structure.ByReference
 
     companion object {
-        // Windows 10 attribute constant for enabling Immersive Dark Mode
-        // Note that this constant is not in official headers for all versions,
-        // and might be considered undocumented for some builds.
         const val DWMWA_USE_IMMERSIVE_DARK_MODE: Int = 20
         const val DWMWA_CAPTION_COLOR: Int = 35
     }
 }
 
+@Suppress("FunctionName", "LocalVariableName")
 internal interface ExtendedUser32 : User32 {
     /**
      * Is the window zoomed (maximised) or not?
@@ -610,7 +610,7 @@ internal interface ExtendedUser32 : User32 {
         const val WM_NCLBUTTONUP: Int = 0x00A2
 
         // non client area right mouse up message
-        val WM_NCRBUTTONUP: Int = 0x00A5
+        const val WM_NCRBUTTONUP: Int = 0x00A5
 
         // window active event
         const val WM_ACTIVATE: Int = 0x0006

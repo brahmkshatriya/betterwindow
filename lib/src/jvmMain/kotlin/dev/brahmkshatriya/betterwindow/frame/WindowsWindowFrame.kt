@@ -12,6 +12,7 @@
 package dev.brahmkshatriya.betterwindow.frame
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -32,8 +33,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -53,7 +53,6 @@ import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -73,7 +72,7 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.zIndex
 import dev.brahmkshatriya.betterwindow.platform.LocalPlatformWindow
-import dev.brahmkshatriya.betterwindow.platform.PlatformWindow
+import dev.brahmkshatriya.betterwindow.platform.WindowsPlatformWindow
 import dev.brahmkshatriya.betterwindow.platform.isSystemInFullscreen
 import dev.brahmkshatriya.betterwindow.platform.window.LayoutHitTestOwner
 import dev.brahmkshatriya.betterwindow.platform.window.LocalTitleBarThemeController
@@ -189,7 +188,8 @@ fun FrameWindowScope.WindowsWindowFrame(
 @Composable
 internal fun rememberWindowsWindowFrameState(): WindowsWindowFrameState? {
     val platformWindow = LocalPlatformWindow.current
-    val layoutHitTestOwner = platformWindow.layoutHitTestOwner ?: return null
+    val layoutHitTestOwner =
+        (platformWindow as? WindowsPlatformWindow)?.layoutHitTestOwner ?: return null
     return remember(platformWindow, layoutHitTestOwner) {
         WindowsWindowFrameState(
             platformWindow,
@@ -200,7 +200,7 @@ internal fun rememberWindowsWindowFrameState(): WindowsWindowFrameState? {
 
 @OptIn(ExperimentalLayoutApi::class, InternalComposeUiApi::class)
 class WindowsWindowFrameState(
-    internal val platformWindow: PlatformWindow,
+    internal val platformWindow: WindowsPlatformWindow,
     private val layoutHitTestOwner: LayoutHitTestOwner,
 ) {
     val titleBarThemeController = TitleBarThemeController()
@@ -264,7 +264,7 @@ class WindowsWindowFrameState(
 
 @Composable
 private fun ExtendToTitleBar(frameState: WindowsWindowFrameState) {
-    val platformWindow = LocalPlatformWindow.current
+    val platformWindow = LocalPlatformWindow.current as? WindowsPlatformWindow ?: return
     LaunchedEffect(platformWindow, frameState) {
         WindowsWindowUtils.instance.collectWindowProcHitTestProvider(platformWindow) { x, y ->
             frameState.hitTest(x, y)
@@ -386,23 +386,24 @@ private fun CaptionButton(
         isHovered -> colors.hovered
         else -> colors.default
     }
-    Surface(
-        color = if (isActive) color.background else color.inactiveBackground,
-        contentColor = if (isActive) color.foreground else color.inactiveForeground,
+    Box(
         modifier = modifier
+            .background(
+                if (isActive) color.background else color.inactiveBackground,
+            )
             .size(46.dp, 32.dp)
             .clickable(
                 onClick = onClick,
                 interactionSource = interaction,
                 indication = null,
-            ),
-        shape = RectangleShape,
+            )
     ) {
         val fontFamily = LocalCaptionIconFamily.current
         Text(
             text = icon.glyph.takeIf { fontFamily != null } ?: icon.fallback,
             fontFamily = fontFamily,
             textAlign = TextAlign.Center,
+            color = if (isActive) color.foreground else color.inactiveForeground,
             fontSize = if (fontFamily != null) 10.sp else 14.sp,
             modifier = Modifier.fillMaxSize().wrapContentSize(Alignment.Center),
         )
@@ -567,4 +568,4 @@ private enum class CaptionButtonIcon(
 private fun Rect.contains(
     x: Float,
     y: Float,
-): Boolean = x >= left && x < right && y >= top && y < bottom
+): Boolean = x in left..<right && y >= top && y < bottom

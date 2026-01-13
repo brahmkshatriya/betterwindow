@@ -1,6 +1,8 @@
 # Better Window
 A better Compose Window, that converts the title bar into insets and allowing you to draw behind it.
 
+BetterWindow also supports [ComposeWindowStyler](https://github.com/MayakaApps/ComposeWindowStyler) (Be sure to use the snapshot version)
+
 ## Acknowledgements
 A lot of the code is directly taken from [Animeko](https://github.com/open-ani/animeko/tree/main/app/shared/ui-foundation/src/desktopMain/kotlin/platform)
 I have just modified it to make it usable for other projects. Feel free to check out their project, it's really cool!
@@ -9,7 +11,7 @@ I have just modified it to make it usable for other projects. Feel free to check
 Add the dependency to your `build.gradle.kts` file
 ```kotlin
 dependencies {
-    implementation("dev.brahmkshatriya:betterwindow:1.0.0")
+    implementation("dev.brahmkshatriya:betterwindow:1.1.0")
 }
 ```
 
